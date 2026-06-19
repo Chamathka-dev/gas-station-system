@@ -243,7 +243,7 @@ export default function AnalyticsDashboard() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value: number) => `Rs. ${value.toLocaleString()}`} />
+                    <Tooltip formatter={(value: any) => `Rs. ${value.toLocaleString()}`} />
                   </PieChart>
                 </ResponsiveContainer>
               )}
