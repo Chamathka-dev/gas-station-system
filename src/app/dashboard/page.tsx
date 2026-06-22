@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Droplet, Users, FileText, BarChart3, LogOut, Settings } from 'lucide-react';
+import { Droplet, Users, FileText, BarChart3, LogOut, Settings, Package, Wallet } from 'lucide-react';
 import Link from 'next/link';
 
 export default function MainDashboard() {
@@ -100,6 +100,32 @@ export default function MainDashboard() {
               <div>
                 <h2 className="text-xl font-bold text-slate-800">Analytics & Profits</h2>
                 <p className="text-slate-500 mt-1">Live Profit Charts & Monthly Overviews</p>
+              </div>
+            </div>
+          </Link>
+
+          {/* Module 5: Retail & Gas */}
+          <Link href="/dashboard/retail" className="group block bg-white p-8 rounded-2xl shadow-sm hover:shadow-xl border border-slate-200 transition-all">
+            <div className="flex items-center gap-6">
+              <div className="bg-yellow-100 text-yellow-600 p-4 rounded-xl group-hover:scale-110 transition-transform">
+                <Package size={32} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Retail Store & Gas</h2>
+                <p className="text-slate-500 mt-1">Engine Oils, Gas Cylinders & Stock Alerts</p>
+              </div>
+            </div>
+          </Link>
+
+          {/* Module 6: Cash Management */}
+          <Link href="/dashboard/cash" className="group block bg-white p-8 rounded-2xl shadow-sm hover:shadow-xl border border-slate-200 transition-all">
+            <div className="flex items-center gap-6">
+              <div className="bg-emerald-100 text-emerald-600 p-4 rounded-xl group-hover:scale-110 transition-transform">
+                <Wallet size={32} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Shift Reconciliation</h2>
+                <p className="text-slate-500 mt-1">Daily Cash Drawer, Expenses & B/FD</p>
               </div>
             </div>
           </Link>
