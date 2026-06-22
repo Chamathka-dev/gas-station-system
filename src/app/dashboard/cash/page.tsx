@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2, Home, Wallet, ArrowRight, Save, DollarSign, Calculator, AlertCircle, Edit2 } from 'lucide-react';
+import { Loader2, Home, Wallet, ArrowRight, Save, DollarSign, Calculator, AlertCircle, Edit2, ArrowDownToLine } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CashDashboard() {
@@ -13,7 +13,7 @@ export default function CashDashboard() {
   // Today's Form State
   const today = new Date().toISOString().split('T')[0];
   const [openingBalance, setOpeningBalance] = useState<number>(0);
-  const [isEditingOpening, setIsEditingOpening] = useState(false); // NEW STATE FOR DAY 1
+  const [isEditingOpening, setIsEditingOpening] = useState(false); 
   const [cashSales, setCashSales] = useState<string>('');
   const [creditCardSales, setCreditCardSales] = useState<string>('');
   const [expenses, setExpenses] = useState<string>('');
@@ -78,13 +78,39 @@ export default function CashDashboard() {
       if (error) throw error;
       
       await fetchData();
-      setIsEditingOpening(false); // Lock it back up after saving
+      setIsEditingOpening(false); 
       alert("Shift Reconciled and Saved!");
     } catch (err: any) {
       alert(`Error saving shift: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // --- Export Cash Reconciliation Report ---
+  const exportCashReport = () => {
+    const headers = ["Date", "Opening Balance", "Cash In", "Cash Out", "Evening Handover", "Variance", "Closing Balance"];
+    const rows = ledgers.map(l => [
+      l.date,
+      l.opening_balance,
+      (Number(l.opening_balance) + Number(l.cash_sales)),
+      (Number(l.expenses) + Number(l.salaries) + Number(l.bank_deposits)),
+      l.evening_handover,
+      l.shortage_overage,
+      l.closing_balance
+    ]);
+    
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + headers.join(",") + "\n" 
+      + rows.map(e => e.join(",")).join("\n");
+      
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Cash_Report_${today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   };
 
   if (isLoading && ledgers.length === 0) {
@@ -122,11 +148,9 @@ export default function CashDashboard() {
 
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               
-              {/* SECTION: Cash In */}
               <div className="space-y-4">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Cash In</h3>
                 
-                {/* UPGRADED OPENING BALANCE FIELD */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="block text-xs font-semibold text-slate-700">Opening Cash (Brought Forward)</label>
@@ -168,7 +192,6 @@ export default function CashDashboard() {
 
               <hr className="border-slate-100" />
 
-              {/* SECTION: Cash Out */}
               <div className="space-y-4">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Cash Out (Deductions)</h3>
                 
@@ -190,7 +213,6 @@ export default function CashDashboard() {
 
               <hr className="border-slate-100" />
 
-              {/* SECTION: Handover & Math */}
               <div className="space-y-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
                 
                 <div className="flex justify-between items-center text-sm">
@@ -223,8 +245,12 @@ export default function CashDashboard() {
         {/* RIGHT COLUMN: The Historical Ledger */}
         <div className="lg:col-span-7">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full flex flex-col">
+            
             <div className="bg-slate-100 p-5 border-b border-slate-200 flex justify-between items-center">
               <h2 className="font-bold text-slate-800 flex items-center gap-2"><Wallet size={18}/> Past Cash Records</h2>
+              <button onClick={exportCashReport} className="text-sm bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold py-1.5 px-3 rounded shadow-sm transition-colors flex items-center gap-2">
+                <ArrowDownToLine size={14} /> Export Excel
+              </button>
             </div>
             
             <div className="overflow-auto flex-1">

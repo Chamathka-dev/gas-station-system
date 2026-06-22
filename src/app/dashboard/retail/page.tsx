@@ -115,6 +115,30 @@ export default function RetailDashboard() {
     }
   };
 
+  // --- 3. Export Retail Stock Report ---
+  const exportRetailReport = () => {
+    const headers = ["Product Name", "Category", "Unit Price (Rs)", "Current Stock", "Status"];
+    const rows = products.map(p => [
+      p.name,
+      p.category,
+      p.price,
+      p.current_stock,
+      p.current_stock <= p.min_quantity ? "LOW STOCK" : "HEALTHY"
+    ]);
+    
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + headers.join(",") + "\n" 
+      + rows.map(e => e.join(",")).join("\n");
+      
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Retail_Stock_Report_${today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
   if (isLoading && products.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">
@@ -207,8 +231,12 @@ export default function RetailDashboard() {
           {/* RIGHT COLUMN: Live Inventory Table */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full flex flex-col">
+              
               <div className="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center">
                 <h2 className="font-bold text-slate-800 flex items-center gap-2"><Package size={18}/> Live Stock Ledger</h2>
+                <button onClick={exportRetailReport} className="text-sm bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold py-1.5 px-3 rounded shadow-sm transition-colors flex items-center gap-2">
+                  <ArrowDownToLine size={14} /> Export Excel
+                </button>
               </div>
               
               <div className="overflow-auto flex-1 pb-16">
@@ -234,7 +262,6 @@ export default function RetailDashboard() {
                             <span className="bg-slate-100 px-2 py-1 rounded text-xs">{p.category}</span>
                           </td>
                           
-                          {/* Unit Price Column */}
                           <td className="py-3 px-4 text-right">
                             {isEditing ? (
                               <input 
@@ -248,7 +275,6 @@ export default function RetailDashboard() {
                             )}
                           </td>
                           
-                          {/* Stock Column */}
                           <td className="py-3 px-4 text-center">
                             {isEditing ? (
                               <input 
@@ -264,7 +290,6 @@ export default function RetailDashboard() {
                             )}
                           </td>
                           
-                          {/* Action / Status Column */}
                           <td className="py-3 px-4 text-center">
                             {isEditing ? (
                               <div className="flex items-center justify-center gap-2">
