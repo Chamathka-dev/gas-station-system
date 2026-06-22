@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2, Home, Package, ShoppingCart, ArrowDownToLine, AlertTriangle, CheckCircle2, Edit2, Save, X } from 'lucide-react';
+import { Loader2, Home, Package, ShoppingCart, ArrowDownToLine, AlertTriangle, CheckCircle2, Edit2, Save, X, History, Filter } from 'lucide-react';
 import Link from 'next/link';
 
 export default function RetailDashboard() {
   const [products, setProducts] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<'sale' | 'restock'>('sale');
@@ -21,9 +22,16 @@ export default function RetailDashboard() {
   const [editPrice, setEditPrice] = useState('');
   const [editStock, setEditStock] = useState('');
 
+  // Transaction Filter State
+  const [txFilter, setTxFilter] = useState<'7' | '30' | '90'>('30');
+
   useEffect(() => {
     fetchProducts();
   }, []);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [txFilter]);
 
   const fetchProducts = async () => {
     setIsLoading(true);
@@ -34,6 +42,27 @@ export default function RetailDashboard() {
       console.error("Error fetching products:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchTransactions = async () => {
+    try {
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - parseInt(txFilter));
+      const dateString = pastDate.toISOString().split('T')[0];
+
+      const { data } = await supabase
+        .from('retail_transactions')
+        .select(`
+          *,
+          retail_products ( name, category )
+        `)
+        .gte('date', dateString)
+        .order('id', { ascending: false });
+        
+      if (data) setTransactions(data);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
     }
   };
 
@@ -72,6 +101,7 @@ export default function RetailDashboard() {
       setProductId('');
       setQuantity('');
       await fetchProducts(); 
+      await fetchTransactions(); // Refresh the transactions table
       alert(`${activeTab === 'sale' ? 'Sale' : 'Restock'} logged successfully!`);
     } catch (error: any) {
       alert(`Error logging transaction: ${error.message}`);
@@ -115,7 +145,7 @@ export default function RetailDashboard() {
     }
   };
 
-  // --- 3. Export Retail Stock Report ---
+  // --- 3. Export Reports ---
   const exportRetailReport = () => {
     const headers = ["Product Name", "Category", "Unit Price (Rs)", "Current Stock", "Status"];
     const rows = products.map(p => [
@@ -126,14 +156,32 @@ export default function RetailDashboard() {
       p.current_stock <= p.min_quantity ? "LOW STOCK" : "HEALTHY"
     ]);
     
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + headers.join(",") + "\n" 
-      + rows.map(e => e.join(",")).join("\n");
-      
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
     link.setAttribute("download", `Retail_Stock_Report_${today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const exportTransactionsReport = () => {
+    const headers = ["Date", "Product", "Category", "Transaction Type", "Quantity", "Total Value (Rs)"];
+    const rows = transactions.map(t => [
+      t.date,
+      t.retail_products?.name || "Unknown",
+      t.retail_products?.category || "Unknown",
+      t.type.toUpperCase(),
+      t.quantity,
+      t.total_value
+    ]);
+    
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Retail_Transactions_${txFilter}_Days.csv`);
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -157,7 +205,7 @@ export default function RetailDashboard() {
         </Link>
         <div>
           <h1 className="text-xl font-bold tracking-tight">Retail Store & Gas</h1>
-          <p className="text-sm text-slate-400">Inventory tracking & Low stock alerts</p>
+          <p className="text-sm text-slate-400">Inventory tracking & Sales History</p>
         </div>
       </header>
 
@@ -230,16 +278,16 @@ export default function RetailDashboard() {
 
           {/* RIGHT COLUMN: Live Inventory Table */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full flex flex-col">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full flex flex-col max-h-[500px]">
               
               <div className="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center">
                 <h2 className="font-bold text-slate-800 flex items-center gap-2"><Package size={18}/> Live Stock Ledger</h2>
                 <button onClick={exportRetailReport} className="text-sm bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold py-1.5 px-3 rounded shadow-sm transition-colors flex items-center gap-2">
-                  <ArrowDownToLine size={14} /> Export Excel
+                  <ArrowDownToLine size={14} /> Export Stock
                 </button>
               </div>
               
-              <div className="overflow-auto flex-1 pb-16">
+              <div className="overflow-auto flex-1">
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 shadow-sm z-10">
                     <tr>
@@ -261,44 +309,27 @@ export default function RetailDashboard() {
                           <td className="py-3 px-4 text-center text-slate-500">
                             <span className="bg-slate-100 px-2 py-1 rounded text-xs">{p.category}</span>
                           </td>
-                          
                           <td className="py-3 px-4 text-right">
                             {isEditing ? (
-                              <input 
-                                type="number" 
-                                value={editPrice} 
-                                onChange={(e) => setEditPrice(e.target.value)}
-                                className="w-24 px-2 py-1 text-sm border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
-                              />
+                              <input type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} className="w-24 px-2 py-1 text-sm border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-right" />
                             ) : (
                               <span className="text-slate-600">Rs. {p.price.toLocaleString()}</span>
                             )}
                           </td>
-                          
                           <td className="py-3 px-4 text-center">
                             {isEditing ? (
-                              <input 
-                                type="number" 
-                                value={editStock} 
-                                onChange={(e) => setEditStock(e.target.value)}
-                                className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
-                              />
+                              <input type="number" value={editStock} onChange={(e) => setEditStock(e.target.value)} className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-center" />
                             ) : (
-                              <span className={`font-mono text-base font-bold ${isLowStock ? 'text-red-600' : 'text-slate-800'}`}>
-                                {p.current_stock}
-                              </span>
+                              <span className={`font-mono text-base font-bold ${isLowStock ? 'text-red-600' : 'text-slate-800'}`}>{p.current_stock}</span>
                             )}
                           </td>
-                          
                           <td className="py-3 px-4 text-center">
                             {isEditing ? (
                               <div className="flex items-center justify-center gap-2">
                                 <button onClick={() => saveProductEdit(p.id)} disabled={isSubmitting} className="p-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
                                   {isSubmitting ? <Loader2 size={14} className="animate-spin"/> : <Save size={14} />}
                                 </button>
-                                <button onClick={cancelEditing} disabled={isSubmitting} className="p-1.5 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors">
-                                  <X size={14} />
-                                </button>
+                                <button onClick={cancelEditing} disabled={isSubmitting} className="p-1.5 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors"><X size={14} /></button>
                               </div>
                             ) : (
                               <button onClick={() => startEditing(p)} className="text-slate-400 hover:text-blue-600 transition-colors p-1 flex items-center justify-center w-full gap-1 text-xs font-semibold">
@@ -314,8 +345,68 @@ export default function RetailDashboard() {
               </div>
             </div>
           </div>
-
         </div>
+
+        {/* FULL WIDTH BOTTOM ROW: Historical Transactions Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="bg-slate-100 p-4 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
+            <h2 className="font-bold text-slate-800 flex items-center gap-2"><History size={18}/> Sales & Restock Ledger</h2>
+            
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Filter size={14} className="text-slate-500" />
+                <select 
+                  value={txFilter} 
+                  onChange={(e: any) => setTxFilter(e.target.value)}
+                  className="bg-white border border-slate-300 rounded px-3 py-1.5 text-sm focus:border-blue-500 outline-none font-semibold text-slate-700"
+                >
+                  <option value="7">Last 7 Days</option>
+                  <option value="30">Last 30 Days</option>
+                  <option value="90">Last 90 Days</option>
+                </select>
+              </div>
+              <button onClick={exportTransactionsReport} className="text-sm bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold py-1.5 px-3 rounded shadow-sm transition-colors flex items-center gap-2">
+                <ArrowDownToLine size={14} /> Export Sales
+              </button>
+            </div>
+          </div>
+          
+          <div className="overflow-auto max-h-[400px]">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 shadow-sm z-10">
+                <tr>
+                  <th className="py-3 px-6 font-semibold text-slate-600">Date</th>
+                  <th className="py-3 px-6 font-semibold text-slate-600">Product Name</th>
+                  <th className="py-3 px-6 font-semibold text-slate-600 text-center">Type</th>
+                  <th className="py-3 px-6 font-semibold text-slate-600 text-center">Quantity</th>
+                  <th className="py-3 px-6 font-semibold text-slate-600 text-right">Total Value (Rs)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {transactions.length === 0 ? (
+                  <tr><td colSpan={5} className="py-8 text-center text-slate-400">No transactions found for this period.</td></tr>
+                ) : (
+                  transactions.map(t => (
+                    <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-3 px-6 text-slate-500">{t.date}</td>
+                      <td className="py-3 px-6 font-semibold text-slate-700">{t.retail_products?.name || "Deleted Product"}</td>
+                      <td className="py-3 px-6 text-center">
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${t.type === 'sale' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {t.type.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="py-3 px-6 text-center font-mono font-bold text-slate-700">{t.quantity}</td>
+                      <td className={`py-3 px-6 text-right font-semibold ${t.type === 'sale' ? 'text-blue-600' : 'text-slate-600'}`}>
+                        {t.type === 'sale' ? '+' : ''}{t.total_value.toLocaleString()}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </main>
     </div>
   );
