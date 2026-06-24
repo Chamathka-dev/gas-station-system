@@ -78,8 +78,8 @@ export default function CashDashboard() {
   };
 
   const handlePrintReceipt = useReactToPrint({
-    content: () => receiptRef.current,
-    documentTitle: `Shift_Receipt_${today}`
+    documentTitle: `Shift_Receipt_${today}`,
+    contentRef: receiptRef, // Updated property for react-to-print v3
   });
 
   const getExportData = () => {
