@@ -53,7 +53,7 @@ export default function RetailDashboard() {
     } catch (error) { console.error(error); }
   };
 
-  // --- THE FIFO TRANSACTION ENGINE ---
+  // --- FIFO TRANSACTION ENGINE ---
   const handleTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!productId || !quantity || parseInt(quantity) <= 0) return;
@@ -74,21 +74,17 @@ export default function RetailDashboard() {
       if (activeTab === 'restock') {
         if (!costPrice || !sellingPrice) { alert("Please enter cost and selling prices."); setIsSubmitting(false); return; }
         
-        // 1. Create a new Batch
         await supabase.from('retail_batches').insert({
           product_id: product.id, date_received: today, cost_price: parseFloat(costPrice), selling_price: parseFloat(sellingPrice), initial_qty: qty, current_qty: qty
         });
 
-        // 2. Update Master Product (Update the master price to the newest selling price)
         await supabase.from('retail_products').update({ current_stock: newStock, price: parseFloat(sellingPrice) }).eq('id', product.id);
         
-        // 3. Log Transaction
         await supabase.from('retail_transactions').insert({ product_id: product.id, date: today, type: 'restock', quantity: qty, total_value: qty * parseFloat(costPrice) });
         
         setCostPrice(''); setSellingPrice('');
 
       } else if (activeTab === 'sale') {
-        // --- FIFO ALGORITHM (Oldest Batches First) ---
         const { data: batches } = await supabase.from('retail_batches').select('*').eq('product_id', product.id).gt('current_qty', 0).order('id', { ascending: true });
         
         let remainingQty = qty;
@@ -98,29 +94,21 @@ export default function RetailDashboard() {
         if (batches) {
           for (const batch of batches) {
             if (remainingQty <= 0) break;
-            
             const qtyToTake = Math.min(batch.current_qty, remainingQty);
             totalCost += qtyToTake * Number(batch.cost_price);
             totalRevenue += qtyToTake * Number(batch.selling_price);
-            
-            // Deduct from batch
             await supabase.from('retail_batches').update({ current_qty: batch.current_qty - qtyToTake }).eq('id', batch.id);
             remainingQty -= qtyToTake;
           }
         }
 
-        // Failsafe: If batches were missing data but master stock allowed it, use master price for remainder
         if (remainingQty > 0) {
-          totalCost += remainingQty * (Number(product.price) * 0.8); // Estimate 20% margin for corrupted data
+          totalCost += remainingQty * (Number(product.price) * 0.8);
           totalRevenue += remainingQty * Number(product.price);
         }
 
         const profit = totalRevenue - totalCost;
-
-        // 1. Update Master Stock
         await supabase.from('retail_products').update({ current_stock: newStock }).eq('id', product.id);
-        
-        // 2. Log Financial Transaction
         await supabase.from('retail_transactions').insert({ 
           product_id: product.id, date: today, type: 'sale', quantity: qty, total_value: totalRevenue, total_cost: totalCost, profit: profit 
         });
@@ -131,6 +119,19 @@ export default function RetailDashboard() {
     } catch (error: any) { alert(error.message); } finally { setIsSubmitting(false); }
   };
 
+  // --- EDIT & CANCEL LOGIC ---
+  const startEditing = (product: any) => {
+    setEditingId(product.id);
+    setEditPrice(product.price);
+    setEditStock(product.current_stock);
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditPrice('');
+    setEditStock('');
+  };
+
   const saveProductEdit = async (id: number) => {
     setIsSubmitting(true);
     try {
@@ -139,12 +140,7 @@ export default function RetailDashboard() {
     } catch (error: any) { alert(error.message); } finally { setIsSubmitting(false); }
   };
 
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    p.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // --- Export Stock Functions ---
+  // --- Export Functions ---
   const getStockExportData = () => {
     const headers = ["Product Name", "Category", "Active Sell Price (Rs)", "Total Stock", "Status"];
     const rows = filteredProducts.map(p => [p.name, p.category, p.price, p.current_stock, p.current_stock <= p.min_quantity ? "LOW STOCK" : "HEALTHY"]);
@@ -171,7 +167,6 @@ export default function RetailDashboard() {
     const doc = new jsPDF(); doc.text("Live Retail Stock", 14, 15); autoTable(doc, { head: [headers], body: rows, startY: 20 }); doc.save(`${filename}.pdf`); setShowStockMenu(false);
   };
 
-  // --- Export Transactions Functions ---
   const getTxExportData = () => {
     const headers = ["Date", "Product", "Type", "Quantity", "Total Value (Rs)", "Profit (Rs)"];
     const rows = transactions.map(t => [t.date, t.retail_products?.name || "Unknown", t.type.toUpperCase(), t.quantity, t.total_value, t.type === 'sale' ? t.profit : '-']);
@@ -198,6 +193,10 @@ export default function RetailDashboard() {
     const doc = new jsPDF(); doc.text("Retail Sales & Profit Ledger", 14, 15); autoTable(doc, { head: [headers], body: rows, startY: 20 }); doc.save(`${filename}.pdf`); setShowTxMenu(false);
   };
 
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    p.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   if (isLoading && products.length === 0) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin mr-2" /> Loading Store...</div>;
 
@@ -211,7 +210,6 @@ export default function RetailDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto p-6 mt-4 space-y-6">
-        
         {lowStockItems.length > 0 && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-4 shadow-sm animate-pulse">
             <div className="bg-red-100 text-red-600 p-2 rounded-lg mt-1"><AlertTriangle size={24} /></div>
@@ -239,15 +237,12 @@ export default function RetailDashboard() {
                     </select>
                   </div>
                   <div><label className="block text-xs font-semibold text-slate-700 mb-1">Quantity</label><input type="number" required min="1" value={quantity} onChange={e => setQuantity(e.target.value)} className="w-full bg-white border rounded px-3 py-2 text-lg font-semibold outline-none" /></div>
-                  
-                  {/* NEW: Dynamic Inputs for Restock */}
                   {activeTab === 'restock' && (
                     <div className="grid grid-cols-2 gap-4 bg-emerald-50 p-3 rounded-lg border border-emerald-200">
                       <div><label className="block text-xs font-semibold text-emerald-800 mb-1">Cost Price (Per Unit)</label><input type="number" required value={costPrice} onChange={e => setCostPrice(e.target.value)} placeholder="Cost..." className="w-full border rounded px-2 py-1 text-sm outline-none focus:border-emerald-500" /></div>
                       <div><label className="block text-xs font-semibold text-emerald-800 mb-1">Selling Price</label><input type="number" required value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} placeholder="Sell For..." className="w-full border rounded px-2 py-1 text-sm outline-none focus:border-emerald-500" /></div>
                     </div>
                   )}
-
                   <button type="submit" disabled={isSubmitting} className={`w-full text-white font-semibold py-3 rounded-lg mt-2 flex items-center justify-center gap-2 ${activeTab === 'sale' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
                     {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : activeTab === 'sale' ? <ShoppingCart size={18} /> : <FileDown size={18} />} 
                     {activeTab === 'sale' ? 'Record Sale (FIFO)' : 'Add Batch to Inventory'}
@@ -307,7 +302,6 @@ export default function RetailDashboard() {
           </div>
         </div>
 
-        {/* BOTTOM ROW: Transactions Table with NEW PROFIT COLUMN */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center relative">
             <h2 className="font-bold text-slate-800 flex items-center gap-2"><TrendingUp size={18}/> Sales & Profit Ledger</h2>
@@ -338,17 +332,13 @@ export default function RetailDashboard() {
                     <td className="py-3 px-6 text-center"><span className={`px-2 py-1 rounded text-xs font-bold ${t.type === 'sale' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>{t.type.toUpperCase()}</span></td>
                     <td className="py-3 px-6 text-center font-mono font-bold">{t.quantity}</td>
                     <td className={`py-3 px-6 text-right font-semibold ${t.type === 'sale' ? 'text-blue-600' : 'text-slate-500'}`}>{t.type === 'sale' ? '+' : '-'}{t.total_value.toLocaleString()}</td>
-                    {/* NEW: PROFIT COLUMN */}
-                    <td className="py-3 px-6 text-right font-bold text-emerald-600">
-                      {t.type === 'sale' ? `Rs. ${t.profit?.toLocaleString() || 0}` : '-'}
-                    </td>
+                    <td className="py-3 px-6 text-right font-bold text-emerald-600">{t.type === 'sale' ? `Rs. ${t.profit?.toLocaleString() || 0}` : '-'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
-
       </main>
     </div>
   );
